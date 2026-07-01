@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+<title>Duck Hunter</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; touch-action:none; user-select:none; -webkit-user-select:none; }
+html, body { width:100%; height:100%; overflow:hidden; background:#1a3a1a; }
+#canvas { display:block; position:absolute; top:0; left:0; }
+#ui { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; font-family:Arial,sans-serif; }
+#score-panel { position:absolute; top:12px; left:50%; transform:translateX(-50%); display:flex; gap:16px; }
+.stat-box { background:rgba(0,0,0,0.6); border:1.5px solid rgba(255,220,100,0.5); border-radius:8px; padding:4px 14px; color:#ffe080; font-size:12px; text-align:center; }
+.stat-box span { display:block; font-size:20px; font-weight:700; color:#fff; }
+#joystick-zone { position:absolute; bottom:30px; left:30px; width:130px; height:130px; pointer-events:all; }
+#joystick-base { width:130px; height:130px; border-radius:50%; background:rgba(0,0,0,0.45); border:2.5px solid rgba(255,255,255,0.3); position:relative; }
+#joystick-dirs { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-wrap:wrap; }
+.jdir { width:50%; height:50%; display:flex; align-items:center; justify-content:center; font-size:20px; color:rgba(255,255,255,0.3); pointer-events:none; }
+#joystick-knob { position:absolute; width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,0.75); border:2px solid rgba(255,255,255,0.9); top:50%; left:50%; transform:translate(-50%,-50%); box-shadow:0 2px 10px rgba(0,0,0,0.5); }
+#fire-btn { position:absolute; bottom:30px; right:30px; width:90px; height:90px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #ff6633, #cc1100); border:3px solid rgba(255,150,100,0.7); color:#fff; font-size:14px; font-weight:700; pointer-events:all; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 0 20px rgba(255,80,0,0.6); letter-spacing:1px; }
+#pause-btn { position:absolute; top:12px; right:16px; width:44px; height:44px; border-radius:10px; background:rgba(0,0,0,0.55); border:1.5px solid rgba(255,255,255,0.25); color:#fff; font-size:20px; pointer-events:all; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+#wave-banner { position:absolute; top:70px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.65); border:1.5px solid rgba(255,220,100,0.6); border-radius:8px; padding:7px 24px; color:#ffe080; font-size:16px; font-weight:700; opacity:0; transition:opacity 0.4s; pointer-events:none; white-space:nowrap; }
+#overlay { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:all; gap:20px; }
+#overlay h1 { color:#ffe080; font-size:34px; text-shadow:0 2px 10px #000; }
+#overlay p { color:#ddd; font-size:16px; text-align:center; max-width:340px; line-height:1.6; }
+.ov-btn { background:linear-gradient(135deg,#ff8c00,#ff3300); color:#fff; border:none; border-radius:28px; padding:14px 44px; font-size:17px; font-weight:700; cursor:pointer; box-shadow:0 4px 18px rgba(255,80,0,0.55); pointer-events:all; }
+.ov-btn-sec { background:rgba(255,255,255,0.15); color:#fff; border:1.5px solid rgba(255,255,255,0.3); border-radius:28px; padding:12px 36px; font-size:15px; font-weight:600; cursor:pointer; pointer-events:all; }
+#pause-overlay { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.72); display:none; flex-direction:column; align-items:center; justify-content:center; pointer-events:all; gap:20px; }
+#pause-overlay h2 { color:#ffe080; font-size:30px; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="ui">
+  <div id="score-panel">
+    <div class="stat-box">PUAN<span id="score-val">0</span></div>
+    <div class="stat-box">DALGA<span id="wave-val">1</span></div>
+    <div class="stat-box">KAÇAN<span id="miss-val">0/5</span></div>
+  </div>
+  <div id="pause-btn">⏸</div>
+  <div id="wave-banner"></div>
+  <div id="joystick-zone">
+    <div id="joystick-base">
+      <div id="joystick-dirs">
+        <div class="jdir">↖</div><div class="jdir">↗</div>
+        <div class="jdir">↙</div><div class="jdir">↘</div>
+      </div>
+      <div id="joystick-knob"></div>
+    </div>
+  </div>
+  <div id="fire-btn">ATEŞ</div>
+  <div id="pause-overlay">
+    <h2>⏸ DURAKLATILDI</h2>
+    <button class="ov-btn" id="resume-btn">DEVAM ET</button>
+    <button class="ov-btn-sec" id="restart-btn-pause">YENİDEN BAŞLA</button>
+  </div>
+  <div id="overlay">
+    <h1>🦆 Duck Hunter</h1>
+    <p>Sol joystick ile 4 köşeye nişan al<br>Sağ alttaki ATEŞ butonu ile vur!<br><br>5 ördek kaçırırsan oyun biter.</p>
+    <button class="ov-btn" id="start-btn">TAM EKRAN &amp; BAŞLA</button>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W = window.innerWidth, H = window.innerHeight;
+canvas.width = W; canvas.height = H;
+window.addEventListener('resize', () => { W = window.innerWidth; H = window.innerHeight; canvas.width = W; canvas.height = H; drawBg(); });
+
+function tryFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (req) req.call(el).catch(()=>{});
+}
+
+const AC = window.AudioContext || window.webkitAudioContext;
+let ac;
+function getAC() { if (!ac) ac = new AC(); return ac; }
+
+function playShot() {
+  try {
+    const a=getAC(), buf=a.createBuffer(1,a.sampleRate*0.2,a.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/a.sampleRate*25)*0.9;
+    const s=a.createBufferSource(); s.buffer=buf;
+    const g=a.createGain(); g.gain.value=0.8;
+    s.connect(g); g.connect(a.destination); s.start();
+  } catch(e) {}
+}
+function playQuack() {
+  try {
+    const a=getAC(), o=a.createOscillator(), g=a.createGain();
+    o.type='sawtooth';
+    o.frequency.setValueAtTime(440,a.currentTime);
+    o.frequency.exponentialRampToValueAtTime(220,a.currentTime+0.12);
+    o.frequency.exponentialRampToValueAtTime(400,a.currentTime+0.24);
+    o.frequency.exponentialRampToValueAtTime(190,a.currentTime+0.38);
+    g.gain.setValueAtTime(0.4,a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.42);
+    o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+0.45);
+  } catch(e) {}
+}
+function playThud() {
+  try {
+    const a=getAC(), o=a.createOscillator(), g=a.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(100,a.currentTime);
+    o.frequency.exponentialRampToValueAtTime(30,a.currentTime+0.2);
+    g.gain.setValueAtTime(0.6,a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.25);
+    o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+0.28);
+  } catch(e) {}
+}
+
+let bgCanvas = document.createElement('canvas');
+let bc = bgCanvas.getContext('2d');
+
+function drawBg() {
+  bgCanvas.width=W; bgCanvas.height=H;
+  const sg=bc.createLinearGradient(0,0,0,H*0.46);
+  sg.addColorStop(0,'#3a8fbf'); sg.addColorStop(1,'#92cce8');
+  bc.fillStyle=sg; bc.fillRect(0,0,W,H*0.46);
+  function cloud(x,y,s) {
+    bc.fillStyle='rgba(255,255,255,0.85)';
+    bc.beginPath(); bc.arc(x,y,s,0,Math.PI*2);
+    bc.arc(x+s*1.4,y-s*0.3,s*0.85,0,Math.PI*2);
+    bc.arc(x+s*2.5,y+s*0.05,s*0.8,0,Math.PI*2);
+    bc.arc(x+s*1.2,y+s*0.3,s*0.7,0,Math.PI*2);
+    bc.fill();
+  }
+  cloud(W*0.08,H*0.07,H*0.04); cloud(W*0.42,H*0.05,H*0.05); cloud(W*0.72,H*0.09,H*0.038);
+  const wg=bc.createLinearGradient(0,H*0.43,0,H*0.72);
+  wg.addColorStop(0,'#2475b0'); wg.addColorStop(1,'#1a4f80');
+  bc.fillStyle=wg; bc.fillRect(0,H*0.43,W,H*0.31);
+  bc.strokeStyle='rgba(255,255,255,0.1)'; bc.lineWidth=1;
+  for(let r=0;r<10;r++){
+    const ry=H*0.48+r*(H*0.2/10);
+    bc.beginPath();
+    for(let x=0;x<W;x+=4) bc.lineTo(x,ry+Math.sin(x*0.035+r*1.3)*2.5);
+    bc.stroke();
+  }
+  const gg=bc.createLinearGradient(0,H*0.69,0,H);
+  gg.addColorStop(0,'#4a7c3f'); gg.addColorStop(0.4,'#3a6230'); gg.addColorStop(1,'#263d20');
+  bc.fillStyle=gg;
+  bc.beginPath(); bc.moveTo(0,H*0.69);
+  for(let x=0;x<=W;x+=50) bc.lineTo(x,H*0.69+Math.sin(x*0.03)*7);
+  bc.lineTo(W,H); bc.lineTo(0,H); bc.closePath(); bc.fill();
+  const step=Math.max(14,Math.floor(W/55));
+  for(let i=0;i<W;i+=step){
+    const jit=Math.sin(i*5.1)*10;
+    const rh=H*0.09+Math.abs(Math.sin(i*0.07))*H*0.06;
+    const rx=i+jit, ry=H*0.72+8;
+    const rg2=bc.createLinearGradient(rx,ry-rh,rx,ry);
+    rg2.addColorStop(0,'#7a5c14'); rg2.addColorStop(1,'#4f7030');
+    bc.strokeStyle=rg2; bc.lineWidth=2.5;
+    bc.beginPath(); bc.moveTo(rx,ry); bc.quadraticCurveTo(rx+4,ry-rh*0.5,rx+3,ry-rh); bc.stroke();
+    bc.fillStyle='#5e3e0e';
+    bc.beginPath(); bc.ellipse(rx+3,ry-rh,3.5,8,0.15,0,Math.PI*2); bc.fill();
+    bc.strokeStyle='#5a8035'; bc.lineWidth=1.5;
+    bc.beginPath(); bc.moveTo(rx,ry-rh*0.4); bc.quadraticCurveTo(rx+18,ry-rh*0.52,rx+26,ry-rh*0.46); bc.stroke();
+    bc.beginPath(); bc.moveTo(rx+3,ry-rh*0.72); bc.quadraticCurveTo(rx-16,ry-rh*0.83,rx-24,ry-rh*0.77); bc.stroke();
+  }
+  bc.fillStyle='#3a6b2f';
+  bc.beginPath(); bc.moveTo(0,H*0.74); bc.lineTo(W,H*0.74); bc.lineTo(W,H); bc.lineTo(0,H); bc.closePath(); bc.fill();
+  bc.strokeStyle='#4e8a40'; bc.lineWidth=1.5;
+  for(let i=0;i<W;i+=8){
+    const bh=H*0.018+Math.sin(i*0.4)*H*0.008;
+    bc.beginPath(); bc.moveTo(i,H*0.74); bc.quadraticCurveTo(i+3,H*0.74-bh,i+1,H*0.74-bh-3); bc.stroke();
+  }
+}
+drawBg();
+
+function drawHunter(x,y,angle,shooting) {
+  ctx.save(); ctx.translate(x,y);
+  const s=Math.min(W,H)/10;
+  ctx.fillStyle='#556B2F';
+  ctx.beginPath(); ctx.ellipse(0,s*0.1,s*0.7,s*0.85,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#8B4513';
+  ctx.beginPath(); ctx.ellipse(0,-s*0.2,s*0.55,s*0.55,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#D2A679';
+  ctx.beginPath(); ctx.ellipse(0,-s*1.05,s*0.5,s*0.58,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#7a5a10';
+  ctx.beginPath(); ctx.ellipse(0,-s*1.4,s*0.68,s*0.18,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#8B6914';
+  ctx.beginPath(); ctx.roundRect(-s*0.4,-s*2.05,s*0.8,s*0.68,s*0.08); ctx.fill();
+  ctx.fillStyle='#1a1a1a';
+  ctx.beginPath(); ctx.arc(-s*0.16,-s*1.1,s*0.08,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(s*0.16,-s*1.1,s*0.08,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.6)';
+  ctx.beginPath(); ctx.arc(-s*0.17,-s*1.12,s*0.05,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(s*0.17,-s*1.12,s*0.05,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#c47a50';
+  ctx.beginPath(); ctx.ellipse(0,-s*1.0,s*0.1,s*0.08,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#5a4a3a';
+  ctx.beginPath(); ctx.ellipse(-s*0.14,-s*0.88,s*0.17,s*0.08,0.25,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(s*0.14,-s*0.88,s*0.17,s*0.08,-0.25,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#4a3a20'; ctx.lineWidth=s*0.04;
+  ctx.beginPath(); ctx.arc(-s*0.16,-s*1.1,s*0.18,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(s*0.16,-s*1.1,s*0.18,0,Math.PI*2); ctx.stroke();
+  ctx.save(); ctx.rotate(angle);
+  ctx.fillStyle='#556B2F';
+  ctx.beginPath(); ctx.roundRect(s*0.1,-s*0.22,s*1.4,s*0.42,s*0.1); ctx.fill();
+  ctx.fillStyle='#5C3A28';
+  ctx.beginPath(); ctx.roundRect(s*1.0,-s*0.18,s*1.8,s*0.3,s*0.06); ctx.fill();
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.roundRect(s*2.5,-s*0.12,s*1.1,s*0.18,s*0.04); ctx.fill();
+  ctx.fillStyle='#7a5010';
+  ctx.beginPath(); ctx.moveTo(s*1.0,s*0.12); ctx.lineTo(s*0.85,s*0.45); ctx.lineTo(s*0.6,s*0.45); ctx.lineTo(s*1.0,-s*0.18); ctx.closePath(); ctx.fill();
+  if(shooting){
+    ctx.fillStyle='rgba(255,220,60,0.9)';
+    ctx.beginPath(); ctx.arc(s*3.6,0,s*0.3,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,130,0,0.6)';
+    ctx.beginPath(); ctx.arc(s*3.6,0,s*0.5,0,Math.PI*2); ctx.fill();
+    for(let f=0;f<6;f++){
+      const fa=f*(Math.PI/3);
+      ctx.beginPath(); ctx.moveTo(s*3.6,0); ctx.lineTo(s*3.6+Math.cos(fa)*s*0.7,Math.sin(fa)*s*0.7);
+      ctx.lineWidth=s*0.05; ctx.strokeStyle='rgba(255,200,0,0.6)'; ctx.stroke();
+    }
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawDuck(d) {
+  ctx.save(); ctx.translate(d.x,d.y);
+  if(d.hit){ ctx.rotate(d.hitAnim*Math.PI*2.5); ctx.globalAlpha=Math.max(0,1-d.hitAnim*0.7); }
+  else { ctx.scale(d.dir>0?1:-1,1); }
+  const s=Math.min(W,H)/22;
+  const wing=Math.sin(Date.now()*0.015)*0.35;
+  ctx.fillStyle='#22623a';
+  ctx.save(); ctx.rotate(-0.35+wing);
+  ctx.beginPath(); ctx.ellipse(-s*0.3,-s*0.4,s*1.0,s*0.45,0.3,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.rotate(0.35-wing);
+  ctx.beginPath(); ctx.ellipse(-s*0.3,s*0.4,s*1.0,s*0.45,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle='#2e8050';
+  ctx.beginPath(); ctx.ellipse(0,0,s*0.9,s*0.6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#1a5230';
+  ctx.beginPath(); ctx.ellipse(s*0.85,-s*0.35,s*0.55,s*0.45,0.3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.9)';
+  ctx.beginPath(); ctx.arc(s*1.06,-s*0.42,s*0.14,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#111';
+  ctx.beginPath(); ctx.arc(s*1.1,-s*0.43,s*0.08,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#e8a020';
+  ctx.beginPath(); ctx.moveTo(s*1.35,-s*0.3); ctx.lineTo(s*1.7,-s*0.26); ctx.lineTo(s*1.7,-s*0.14); ctx.lineTo(s*1.35,-s*0.18); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#1a5230';
+  ctx.beginPath(); ctx.ellipse(-s*0.95,s*0.12,s*0.45,s*0.32,-0.4,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+let state='menu', paused=false;
+let score=0, missed=0, wave=1;
+let ducks=[], particles=[];
+let aimAngle=0;
+let shooting=false, shootTimer=0;
+let ducksSpawned=0, ducksForWave=6;
+let spawnInterval=2200, lastSpawn=0;
+let waveTransition=false;
+
+const MISS_MAX=5;
+const DIAGONALS=[
+  {a:-Math.PI*3/4,dx:-1,dy:-1},
+  {a:-Math.PI/4, dx:1, dy:-1},
+  {a:Math.PI/4,  dx:1, dy:1},
+  {a:Math.PI*3/4,dx:-1,dy:1},
+];
+
+function cornerSpawn() {
+  const corners=[{sx:-50,sy:H*0.05},{sx:W+50,sy:H*0.05},{sx:-50,sy:-50},{sx:W+50,sy:-50}];
+  const c=corners[Math.floor(Math.random()*corners.length)];
+  const spd=1.4+wave*0.3+Math.random()*0.6;
+  const tx=W*0.25+Math.random()*W*0.5, ty=H*0.2+Math.random()*H*0.3;
+  const dxr=tx-c.sx, dyr=ty-c.sy, len=Math.sqrt(dxr*dxr+dyr*dyr);
+  return {x:c.sx,y:c.sy,vx:(dxr/len)*spd,vy:(dyr/len)*spd,dir:c.sx<0?1:-1,hit:false,hitAnim:0,escaped:false,points:10+wave*5};
+}
+
+function spawnWave() {
+  const cnt=wave>=3&&Math.random()<0.45?2:1;
+  for(let i=0;i<cnt;i++) if(ducksSpawned<ducksForWave){ ducks.push(cornerSpawn()); ducksSpawned++; }
+}
+
+function startWave(w) {
+  wave=w; ducks=[]; particles=[];
+  ducksSpawned=0; waveTransition=false;
+  ducksForWave=5+w*2;
+  spawnInterval=Math.max(800,2200-w*220);
+  lastSpawn=Date.now()-spawnInterval+200;
+  document.getElementById('wave-val').textContent=w;
+  const wb=document.getElementById('wave-banner');
+  wb.textContent='DALGA '+w+' BAŞLIYOR!';
+  wb.style.opacity='1';
+  setTimeout(()=>wb.style.opacity='0',2000);
+  updateHUD();
+}
+
+function startGame() {
+  score=0; missed=0; wave=0; paused=false;
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('pause-overlay').style.display='none';
+  state='playing';
+  startWave(1);
+}
+
+function updateHUD() {
+  document.getElementById('score-val').textContent=score;
+  document.getElementById('miss-val').textContent=missed+'/'+MISS_MAX;
+}
+
+function showGameOver() {
+  state='gameover';
+  const ov=document.getElementById('overlay');
+  ov.style.display='flex';
+  ov.innerHTML='<h1>OYUN BİTTİ</h1><p>Toplam Puan: <b style="color:#ffe080;font-size:24px">'+score+'</b><br>Ulaşılan Dalga: '+wave+'</p><button class="ov-btn" id="start-btn">TEKRAR OYNA</button>';
+  document.getElementById('start-btn').addEventListener('click',startGame);
+}
+
+function togglePause() {
+  if(state!=='playing') return;
+  paused=!paused;
+  const po=document.getElementById('pause-overlay');
+  const pb=document.getElementById('pause-btn');
+  if(paused){ po.style.display='flex'; pb.textContent='▶'; }
+  else { po.style.display='none'; pb.textContent='⏸'; lastSpawn=Date.now(); }
+}
+
+document.getElementById('pause-btn').addEventListener('click',togglePause);
+document.getElementById('pause-btn').addEventListener('touchstart',e=>{e.preventDefault();togglePause();},{passive:false});
+document.getElementById('resume-btn').addEventListener('click',togglePause);
+document.getElementById('resume-btn').addEventListener('touchstart',e=>{e.preventDefault();togglePause();},{passive:false});
+document.getElementById('restart-btn-pause').addEventListener('click',startGame);
+document.getElementById('restart-btn-pause').addEventListener('touchstart',e=>{e.preventDefault();startGame();},{passive:false});
+
+let joyActive=false, joyId=null, joyBX=0, joyBY=0;
+const joyZone=document.getElementById('joystick-zone');
+const joyKnob=document.getElementById('joystick-knob');
+const joyBase=document.getElementById('joystick-base');
+const JR=52;
+
+function nearestDiag(dx,dy) {
+  let best=0, bestScore=-99;
+  for(let i=0;i<DIAGONALS.length;i++){
+    const dot=dx*DIAGONALS[i].dx+dy*DIAGONALS[i].dy;
+    if(dot>bestScore){bestScore=dot;best=i;}
+  }
+  return DIAGONALS[best];
+}
+
+function joyStart(e) {
+  e.preventDefault();
+  const t=e.changedTouches?e.changedTouches[0]:e;
+  joyId=t.identifier!==undefined?t.identifier:'mouse';
+  const r=joyBase.getBoundingClientRect();
+  joyBX=r.left+r.width/2; joyBY=r.top+r.height/2;
+  joyActive=true; moveJoy(t.clientX,t.clientY);
+}
+function joyMove(e) {
+  e.preventDefault();
+  if(!joyActive)return;
+  let t=e;
+  if(e.changedTouches) for(let i=0;i<e.changedTouches.length;i++) if(e.changedTouches[i].identifier===joyId){t=e.changedTouches[i];break;}
+  moveJoy(t.clientX,t.clientY);
+}
+function joyEnd(e) { e.preventDefault(); joyActive=false; joyKnob.style.transform='translate(-50%,-50%)'; }
+function moveJoy(cx,cy) {
+  const dx=cx-joyBX, dy=cy-joyBY;
+  if(Math.sqrt(dx*dx+dy*dy)>14){
+    const d=nearestDiag(dx,dy); aimAngle=d.a;
+    joyKnob.style.transform=`translate(calc(-50% + ${d.dx*JR}px),calc(-50% + ${d.dy*JR}px))`;
+  } else { joyKnob.style.transform='translate(-50%,-50%)'; }
+}
+
+joyZone.addEventListener('touchstart',joyStart,{passive:false});
+joyZone.addEventListener('touchmove',joyMove,{passive:false});
+joyZone.addEventListener('touchend',joyEnd,{passive:false});
+joyZone.addEventListener('mousedown',joyStart);
+window.addEventListener('mousemove',e=>{if(joyActive)joyMove(e);});
+window.addEventListener('mouseup',e=>{if(joyActive)joyEnd(e);});
+
+function doFire() {
+  if(state!=='playing'||paused)return;
+  playShot(); shooting=true; shootTimer=200;
+  const hx=W*0.5, hy=H*0.72;
+  const adx=Math.cos(aimAngle), ady=Math.sin(aimAngle);
+  for(const d of ducks){
+    if(d.hit||d.escaped)continue;
+    const ddx=d.x-hx, ddy=d.y-hy;
+    const dist=Math.sqrt(ddx*ddx+ddy*ddy);
+    const dot=(ddx*adx+ddy*ady)/dist;
+    const ang=Math.acos(Math.min(1,Math.max(-1,dot)));
+    if(dist<W*0.55&&ang<0.42){
+      d.hit=true; playQuack(); setTimeout(playThud,360);
+      score+=d.points;
+      for(let p=0;p<14;p++) particles.push({x:d.x,y:d.y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,life:1,col:['#4a9c40','#e8a020','#fff','#c0e0a0'][Math.floor(Math.random()*4)]});
+      updateHUD(); break;
+    }
+  }
+}
+document.getElementById('fire-btn').addEventListener('touchstart',e=>{e.preventDefault();doFire();},{passive:false});
+document.getElementById('fire-btn').addEventListener('click',doFire);
+document.getElementById('start-btn').addEventListener('click',()=>{ tryFullscreen(); startGame(); });
+document.getElementById('start-btn').addEventListener('touchstart',e=>{ e.preventDefault(); tryFullscreen(); startGame(); },{passive:false});
+
+let last=0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  const dt=Math.min(ts-last,50); last=ts;
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(bgCanvas,0,0,W,H);
+  if(state!=='playing'||paused) return;
+
+  const now=Date.now();
+  if(ducksSpawned<ducksForWave&&now-lastSpawn>spawnInterval){ spawnWave(); lastSpawn=now; }
+
+  const alive=ducks.filter(d=>!d.hit&&!d.escaped);
+  if(!waveTransition&&ducksSpawned>=ducksForWave&&alive.length===0){
+    waveTransition=true; setTimeout(()=>startWave(wave+1),2000);
+  }
+
+  for(const d of ducks){
+    if(d.hit){ d.hitAnim+=0.032; d.y+=5+d.hitAnim*4; d.x+=d.vx*0.2; }
+    else if(!d.escaped){
+      d.x+=d.vx; d.y+=d.vy;
+      if(d.y>H*0.18&&d.y<H*0.62&&d.x>W*0.05&&d.x<W*0.95){ d.vx+=(Math.random()-0.5)*0.1; d.vx=Math.max(-3,Math.min(3,d.vx)); }
+      if(d.y>H*0.74||d.y<-80||d.x<-120||d.x>W+120){
+        if(!d.hit){ d.escaped=true; missed++; updateHUD(); if(missed>=MISS_MAX)setTimeout(showGameOver,400); }
+      }
+    }
+    if(!d.escaped&&!(d.hit&&d.hitAnim>1.8)) drawDuck(d);
+  }
+
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.18; p.life-=0.03;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    ctx.globalAlpha=p.life; ctx.fillStyle=p.col;
+    ctx.beginPath(); ctx.arc(p.x,p.y,5*p.life,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  shootTimer-=dt; if(shootTimer<0)shooting=false;
+  drawHunter(W*0.5,H*0.72,aimAngle,shooting);
+
+  ctx.fillStyle='#ffe080'; ctx.font='bold 15px Arial'; ctx.textAlign='center';
+  for(const d of ducks){
+    if(d.hit&&d.hitAnim<0.55){
+      ctx.globalAlpha=1-d.hitAnim*1.8;
+      ctx.fillText('+'+d.points,d.x,d.y-35-d.hitAnim*25);
+      ctx.globalAlpha=1;
+    }
+  }
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
